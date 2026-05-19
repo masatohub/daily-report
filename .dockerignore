@@ -1,0 +1,11 @@
+.git
+.github
+.next
+.husky
+node_modules
+coverage
+*.md
+*.tsbuildinfo
+.env*
+.DS_Store
+Makefile
