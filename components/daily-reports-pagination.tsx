@@ -14,6 +14,8 @@ type Props = {
   currentPage: number;
   perPage: number;
   basePath: string;
+  /** Serialized URLSearchParams string (without leading "?") for filter params to preserve across page navigation. */
+  searchQuery?: string;
 };
 
 export function DailyReportsPagination({
@@ -21,6 +23,7 @@ export function DailyReportsPagination({
   currentPage,
   perPage,
   basePath,
+  searchQuery,
 }: Props) {
   const totalPages = calcTotalPages(total, perPage);
 
@@ -28,7 +31,11 @@ export function DailyReportsPagination({
 
   const pageItems = calcPageItems(currentPage, totalPages);
 
-  const href = (page: number) => `${basePath}?page=${page}`;
+  const href = (page: number) => {
+    const params = new URLSearchParams(searchQuery ?? "");
+    params.set("page", String(page));
+    return `${basePath}?${params.toString()}`;
+  };
 
   return (
     <Pagination>
