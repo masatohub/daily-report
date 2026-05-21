@@ -1,8 +1,14 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { DailyReportsPagination } from "@/components/daily-reports-pagination";
+import { DailyReportsSearchForm } from "@/components/daily-reports-search-form";
+import { filterDailyReports } from "@/lib/daily-reports-filter";
 import type { DailyReport, DailyReportsResponse } from "@/types/daily-report";
 
 const PER_PAGE = 10;
+
+// Today fixed to 2026-05-21 for mock data consistency
+const MOCK_TODAY = "2026-05-21";
 
 function generateMockReports(): DailyReport[] {
   const users = [
@@ -10,7 +16,7 @@ function generateMockReports(): DailyReport[] {
     { id: 2, name: "佐藤花子" },
   ];
   return Array.from({ length: 25 }, (_, i) => {
-    const date = new Date("2026-05-21");
+    const date = new Date(MOCK_TODAY);
     date.setDate(date.getDate() - i);
     const user = users[i % users.length];
     return {
@@ -33,26 +39,64 @@ function generateMockReports(): DailyReport[] {
   });
 }
 
+type FilterParams = {
+  page: number;
+  from?: string;
+  to?: string;
+  user_id?: string;
+  keyword?: string;
+};
+
 function getMockDailyReports(
-  page: number,
+  params: FilterParams,
   perPage: number,
 ): DailyReportsResponse {
   const allReports = generateMockReports();
-  const start = (page - 1) * perPage;
+  const filtered = filterDailyReports(allReports, {
+    from: params.from,
+    to: params.to,
+    user_id: params.user_id,
+    keyword: params.keyword,
+  });
+  const start = (params.page - 1) * perPage;
   return {
-    data: allReports.slice(start, start + perPage),
-    meta: { total: allReports.length, page, per_page: perPage },
+    data: filtered.slice(start, start + perPage),
+    meta: { total: filtered.length, page: params.page, per_page: perPage },
   };
 }
 
 type PageProps = {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{
+    page?: string;
+    from?: string;
+    to?: string;
+    user_id?: string;
+    keyword?: string;
+  }>;
 };
 
 export default async function DailyReportsPage({ searchParams }: PageProps) {
   const params = await searchParams;
   const page = Math.max(1, Number(params.page ?? 1));
-  const { data: reports, meta } = getMockDailyReports(page, PER_PAGE);
+
+  const filterParams: FilterParams = {
+    page,
+    from: params.from,
+    to: params.to,
+    user_id: params.user_id,
+    keyword: params.keyword,
+  };
+
+  const { data: reports, meta } = getMockDailyReports(filterParams, PER_PAGE);
+
+  // Build a searchQuery string that carries filter params (excluding page)
+  // so that pagination links can preserve the current filter state.
+  const filterSearchParams = new URLSearchParams();
+  if (params.from) filterSearchParams.set("from", params.from);
+  if (params.to) filterSearchParams.set("to", params.to);
+  if (params.user_id) filterSearchParams.set("user_id", params.user_id);
+  if (params.keyword) filterSearchParams.set("keyword", params.keyword);
+  const searchQuery = filterSearchParams.toString();
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -65,6 +109,11 @@ export default async function DailyReportsPage({ searchParams }: PageProps) {
           新規作成
         </Link>
       </div>
+
+      {/* Filter form — wrapped in Suspense because it uses useSearchParams internally */}
+      <Suspense fallback={null}>
+        <DailyReportsSearchForm />
+      </Suspense>
 
       <div className="border-border bg-card rounded-lg border">
         <table className="w-full text-sm">
@@ -133,8 +182,9 @@ export default async function DailyReportsPage({ searchParams }: PageProps) {
 
       <div className="text-muted-foreground mt-4 flex items-center justify-between text-sm">
         <span>
-          {meta.total} 件中 {(page - 1) * PER_PAGE + 1}〜
-          {Math.min(page * PER_PAGE, meta.total)} 件を表示
+          {meta.total === 0
+            ? "0 件"
+            : `${meta.total} 件中 ${(page - 1) * PER_PAGE + 1}〜${Math.min(page * PER_PAGE, meta.total)} 件を表示`}
         </span>
       </div>
 
@@ -143,6 +193,7 @@ export default async function DailyReportsPage({ searchParams }: PageProps) {
         currentPage={page}
         perPage={PER_PAGE}
         basePath="/daily-reports"
+        searchQuery={searchQuery}
       />
     </div>
   );
